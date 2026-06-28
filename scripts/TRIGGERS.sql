@@ -1,6 +1,9 @@
 USE VeterinariaDB;
 GO
 
+
+-- tr_CancelarTurnosVeterinarioInactivo: Cancela automáticamente los turnos programados de un veterinario cuando pasa a estado inactivo.
+
 CREATE TRIGGER tr_CancelarTurnosVeterinarioInactivo
 ON Veterinarios
 AFTER UPDATE
@@ -30,5 +33,53 @@ BEGIN
     BEGIN CATCH
         ROLLBACK TRANSACTION
     END CATCH
+END
+GO
+
+
+-- tr_Turnos_EvitarSuperposicionVeterinario: Evita registrar turnos superpuestos para un mismo veterinario o animal en la misma fecha y horario.
+
+CREATE TRIGGER tr_Turnos_EvitarSuperposicionVeterinario
+ON Turnos
+INSTEAD OF INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN Turnos t
+            ON t.IdVeterinario = i.IdVeterinario
+           AND t.Fecha = i.Fecha
+           AND t.Hora = i.Hora
+           AND t.EstadoTurno = 'programado'
+           AND t.Activo = 1
+    )
+    BEGIN
+        RAISERROR('EL VETERINARIO YA TIENE UN TURNO PROGRAMADO EN ESA FECHA Y HORARIO.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN Turnos t
+            ON t.IdAnimal = i.IdAnimal
+           AND t.Fecha = i.Fecha
+           AND t.Hora = i.Hora
+           AND t.EstadoTurno = 'programado'
+           AND t.Activo = 1
+    )
+    BEGIN
+        RAISERROR('EL ANIMAL YA TIENE UN TURNO PROGRAMADO EN ESA FECHA Y HORARIO.', 16, 1);
+        RETURN;
+    END;
+
+    INSERT INTO Turnos
+    (IdAnimal, IdVeterinario, IdServicio, EstadoTurno, Fecha, Hora, FechaAlta, Activo)
+    SELECT
+    IdAnimal, IdVeterinario, IdServicio, EstadoTurno, Fecha, Hora, FechaAlta, Activo
+    FROM inserted;
 END
 GO

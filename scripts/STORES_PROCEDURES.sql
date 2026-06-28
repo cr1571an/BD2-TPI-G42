@@ -1,6 +1,9 @@
 USE VeterinariaDB;
 GO
 
+
+-- sp_ActualizarListaPrecios: Actualiza el precio unitario de los artículos según una categoría, proveedor y porcentaje indicado.
+
 CREATE PROCEDURE sp_ActualizarListaPrecios
 		@IdCategoria INT,
         @IdProveedor INT,
@@ -60,4 +63,81 @@ BEGIN
 		END
 		PRINT 'Error durante la actualizacion de precios: ' + ERROR_MESSAGE()
 	END CATCH
-END
+END;
+GO
+
+
+-- sp_CerrarAtencionClinica: Cierra una atención veterinaria, registra su historial clínico y actualiza su estado a finalizado.
+
+CREATE PROCEDURE sp_CerrarAtencionClinica
+    @IdAtencion INT,
+    @Diagnostico VARCHAR(300),
+    @Tratamiento VARCHAR(255),
+    @Observaciones VARCHAR(255)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @AtencionActivo BIT;
+    DECLARE @AtencionEstado VARCHAR(15);
+
+    SELECT
+        @AtencionActivo = Activo,
+        @AtencionEstado = Estado
+    FROM Atenciones
+    WHERE IdAtencion = @IdAtencion;
+
+    IF @AtencionActivo IS NULL
+    BEGIN
+        RAISERROR('La atencion indicada no existe.', 16, 1);
+        RETURN;
+    END;
+
+    IF @AtencionActivo = 0
+    BEGIN
+        RAISERROR('La atencion no se encuentra activa.', 16, 1);
+        RETURN;
+    END;
+
+    IF @AtencionEstado NOT IN ('atendiendo')
+    BEGIN
+        RAISERROR('Solo se puede cerrar una atencion que se encuentra en estado atendiendo.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM HistorialClinico
+        WHERE IdAtencion = @IdAtencion
+    )
+    BEGIN
+        RAISERROR('La atencion ya tiene historial clinico cargado.', 16, 1);
+        RETURN;
+    END;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        INSERT INTO HistorialClinico
+        (IdAtencion, Diagnostico, Tratamiento, Observaciones, Activo)
+        VALUES
+        (@IdAtencion, @Diagnostico, @Tratamiento, @Observaciones, 1);
+
+        UPDATE Atenciones
+        SET Estado = 'finalizado',
+            FechaAtencion = GETDATE()
+        WHERE IdAtencion = @IdAtencion;
+
+        COMMIT TRANSACTION;
+
+        PRINT 'Atencion clinica cerrada correctamente.';
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+
+        RAISERROR('Error al cerrar la atencion clinica.', 16, 1);
+    END CATCH
+END;
+GO
