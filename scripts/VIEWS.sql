@@ -44,3 +44,20 @@ WHERE a.Activo = 1
   AND a.Stock <= a.StockMinimo;
 GO
 
+
+-- Muestra los 10 productos con mayor ganancia, mostrando el nombre, la categoría, las unidades vendidas y los ingresos generados.
+
+CREATE VIEW vw_Top10Productos AS
+SELECT TOP 10 
+    a.Nombre Productos,
+    c.Nombre Categoria,
+    SUM(dv.Cantidad) UnidadesVendidas, 
+    CONVERT(INT, SUM(dv.Subtotal)) IngresoTotal,
+    CONVERT(INT, SUM(dv.Subtotal) - SUM(dv.Cantidad *(a.PrecioUnitario/(1+(a.PorcentajeGanancia/100))))) Ganancia
+FROM DetallesVenta dv
+INNER JOIN Articulos a ON dv.IdArticulo = a.IdArticulo
+INNER JOIN Categorias c ON a.IdCategoria = c.IdCategoria
+INNER JOIN Ventas v ON dv.IdVenta = v.IdVenta
+GROUP BY a.IdArticulo, a.Nombre, c.Nombre, a.PrecioUnitario, a.PorcentajeGanancia
+ORDER BY Ganancia DESC;
+GO

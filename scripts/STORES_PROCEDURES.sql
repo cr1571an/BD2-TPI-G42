@@ -141,3 +141,54 @@ BEGIN
     END CATCH
 END;
 GO
+
+
+--Asocia un artículo a una venta, actualiza sus importes y descuenta el stock correspondiente.
+
+CREATE PROCEDURE sp_AsociarArticuloAVenta
+    @IdVenta INT,
+    @IdArticulo INT,
+    @Cantidad SMALLINT,
+    @Bonificacion DECIMAL(5,2)
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        DECLARE @PrecioUnitario MONEY;
+        DECLARE @ImporteBruto MONEY;
+        DECLARE @ImporteNeto MONEY;
+
+        SELECT @PrecioUnitario = PrecioUnitario
+        FROM Articulos
+        WHERE IdArticulo = @IdArticulo AND Activo = 1;
+
+        SET @ImporteBruto = @Cantidad * @PrecioUnitario;
+
+        SET @ImporteNeto = @ImporteBruto * (1 - (@Bonificacion / 100.0));
+
+        INSERT INTO DetallesVenta
+        (IdVenta, IdArticulo, Cantidad, PrecioUnitario, Bonificacion, Subtotal, Activo)
+        VALUES
+        ( @IdVenta, @IdArticulo, @Cantidad, @PrecioUnitario, @Bonificacion, @ImporteNeto, 1);
+
+        UPDATE Ventas
+        SET
+            SubtotalBruto = ISNULL(SubtotalBruto, 0) + @ImporteBruto,
+            ImporteTotal = ISNULL(ImporteTotal, 0) + @ImporteNeto
+        WHERE IdVenta = @IdVenta AND Activo = 1;
+
+        UPDATE Articulos
+        SET Stock = Stock - @Cantidad
+        WHERE IdArticulo = @IdArticulo;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+        DECLARE @Error NVARCHAR(4000);
+        SET @Error = 'sp_AsociarArticuloAVenta: ' + ERROR_MESSAGE();
+        RAISERROR(@Error, 16, 1);
+    END CATCH
+END;

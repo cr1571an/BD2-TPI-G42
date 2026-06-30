@@ -83,3 +83,22 @@ BEGIN
     FROM inserted;
 END
 GO
+
+
+-- Actualiza el stock y el precio de un artículo al registrar un detalle de compra.
+
+CREATE TRIGGER  tr_ActualizarStockYPrecioArticulo
+ON DetallesCompra
+AFTER INSERT
+AS
+BEGIN
+    UPDATE A
+    SET
+        A.Stock = A.Stock + I.Cantidad,
+        A.PrecioUnitario =
+            I.PrecioUnitario *
+            (1 + A.PorcentajeGanancia / 100.0)
+    FROM Articulos A
+    INNER JOIN inserted I
+        ON A.IdArticulo = I.IdArticulo;
+END;
